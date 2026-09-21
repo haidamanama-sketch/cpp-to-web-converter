@@ -1,102 +1,79 @@
 # CPP2WEB
 
-A cross-platform C++ tool that generates a simple HTML + JavaScript + CSS application from C++-style UI definitions and works on Windows, macOS, and Linux.
+CPP2WEB is a small, dependency-free C++17 tool for producing usable static web interfaces. It is not a pretend C++ compiler: it intentionally supports a clear UI DSL, escapes generated content, uses semantic HTML, and produces files that can be hosted anywhere.
 
-## One-command Linux installation
-
-The following command downloads the source, builds a Release version, and installs `cpp2web_app` into `~/.local/bin`:
+## Linux one-command installation
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/haidamanama-sketch/cpp-to-web-converter/main/install.sh | bash
 ```
 
-If `curl` is unavailable, use `wget`:
+Or with `wget`:
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/haidamanama-sketch/cpp-to-web-converter/main/install.sh | bash
 ```
 
-The installer requires `cmake`, `tar`, and a working C++ compiler. It does not require `sudo` by default. If `~/.local/bin` is not already in `PATH`, run the export command printed by the installer, then use:
+The installer builds a Release binary into `~/.local/bin`. It requires CMake, a C++17 compiler, `tar`, and curl or wget. Then run:
 
 ```bash
-cpp2web_app --output ./demo-output --open
+cpp2web_app --input app.cpp --output web --open
 ```
 
-To install somewhere else:
+## Supported input
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/haidamanama-sketch/cpp-to-web-converter/main/install.sh | bash -s -- --prefix "$HOME/.local"
-```
-
-For a pinned branch or tag, set `CPP2WEB_REF`:
-
-```bash
-CPP2WEB_REF=main curl -fsSL https://raw.githubusercontent.com/haidamanama-sketch/cpp-to-web-converter/main/install.sh | bash
-```
-
-## Features
-
-- C++ code generation for browser UI
-- Pure C++ header fallback when no graphics library is available
-- Cross-platform build via CMake
-- Output project with `index.html`, `styles.css`, and `app.js`
-- Works as a command-line tool and as a reusable library
-
-## Project structure
-
-- `include/cpp2web/platform.hpp` — OS detection and launch helpers
-- `include/cpp2web/web_ui.hpp` — no-graphics fallback UI header
-- `include/cpp2web/converter.hpp` — project conversion logic
-- `src/converter.cpp` — conversion implementation
-- `src/main.cpp` — command-line entry point
-- `examples/basic_app.cpp` — sample app
-- `install.sh` — Linux one-command installer
-
-## Build from source
-
-```bash
-mkdir -p build
-cd build
-cmake ..
-cmake --build .
-```
-
-Run:
-
-```bash
-./cpp2web_app --output ../demo-output
-```
-
-If you want to open the generated page immediately:
-
-```bash
-./cpp2web_app --output ../demo-output --open
-```
-
-## Example C++ input
+CPP2WEB deliberately supports a small, predictable DSL instead of claiming to translate arbitrary C++:
 
 ```cpp
 #include "cpp2web/web_ui.hpp"
 
 int main() {
-    cpp2web::WebApp app("Calculator");
-    app.window("Main")
-       .button("Add")
-       .button("Subtract")
-       .text("Result: 0");
-
-    app.exportProject("./output");
-    return 0;
+    cpp2web::WebApp app("Contact form");
+    app.window("Contact")
+       .text("Tell us how to reach you")
+       .input("email", "you@example.com")
+       .button("Send", "send-form");
+    app.exportProject("./web");
 }
 ```
 
-Generated output includes:
-- `index.html`
-- `styles.css`
-- `app.js`
+When using the command-line converter, the same calls are read from a `.cpp` file. It generates:
 
-## Notes
+- `index.html` with labels, inputs, buttons, accessibility attributes, and escaped text
+- `styles.css` with responsive and dark-mode styling
+- `app.js` with safe `textContent` updates and input collection
 
-- This project focuses on a pragmatic C++ UI abstraction and web export.
-- If your environment does not have a GUI library like Qt, SDL, or OpenGL, the included header provides a lightweight fallback.
-- The project is intentionally cross-platform and uses only standard C++17 features.
+Supported calls:
+
+- `.window("title")`
+- `.text("content")`
+- `.input("id", "placeholder")`
+- `.button("label", "action")` (the action argument is optional)
+
+## Build from source
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/cpp2web_app --input examples/basic_app.cpp --output ./web
+```
+
+On Windows with Visual Studio:
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\cpp2web_app.exe --input examples\basic_app.cpp --output web
+```
+
+On macOS:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/cpp2web_app --input examples/basic_app.cpp --output web --open
+```
+
+## Scope and roadmap
+
+The converter is intentionally honest about scope. It does not parse arbitrary C++ or execute C++ in the browser. The next useful additions are repeatable components, forms with validation, a JSON data interface, and tests for generated output.
