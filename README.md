@@ -2,23 +2,7 @@
 
 CPP2WEB is a small, dependency-free C++17 tool for producing usable static web interfaces. It is not a pretend C++ compiler: it intentionally supports a clear UI DSL, escapes generated content, uses semantic HTML, and produces files that can be hosted anywhere.
 
-## Linux one-command installation
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/haidamanama-sketch/cpp-to-web-converter/main/install.sh | bash
-```
-
-Or with `wget`:
-
-```bash
-wget -qO- https://raw.githubusercontent.com/haidamanama-sketch/cpp-to-web-converter/main/install.sh | bash
-```
-
-The installer builds a Release binary into `~/.local/bin`. It requires CMake, a C++17 compiler, `tar`, and curl or wget. Then run:
-
-```bash
-cpp2web_app --input app.cpp --output web --open
-```
 
 ## Supported input
 
