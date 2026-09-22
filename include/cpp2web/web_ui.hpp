@@ -8,6 +8,35 @@
 #include <vector>
 
 namespace cpp2web {
+namespace {
+
+inline std::string escapeHtml(const std::string& value) {
+    std::string result;
+    result.reserve(value.size());
+    for (const char ch : value) {
+        switch (ch) {
+            case '&': result += "&amp;"; break;
+            case '<': result += "&lt;"; break;
+            case '>': result += "&gt;"; break;
+            case '"': result += "&quot;"; break;
+            case '\'': result += "&#39;"; break;
+            default: result += ch; break;
+        }
+    }
+    return result;
+}
+
+} // namespace
+
+struct Input {
+    std::string id;
+    std::string placeholder;
+};
+
+struct Button {
+    std::string label;
+    std::string action;
+};
 
 class WebApp {
 public:
@@ -20,7 +49,16 @@ public:
     }
 
     WebApp& button(std::string label) {
-        buttons_.push_back(std::move(label));
+        return button(std::move(label), {});
+    }
+
+    WebApp& button(std::string label, std::string action) {
+        buttons_.push_back({std::move(label), std::move(action)});
+        return *this;
+    }
+
+    WebApp& input(std::string id, std::string placeholder = {}) {
+        inputs_.push_back({std::move(id), std::move(placeholder)});
         return *this;
     }
 
@@ -31,8 +69,9 @@ public:
 
     const std::string& title() const { return title_; }
     const std::vector<std::string>& windows() const { return windows_; }
-    const std::vector<std::string>& buttons() const { return buttons_; }
+    const std::vector<Button>& buttons() const { return buttons_; }
     const std::vector<std::string>& labels() const { return labels_; }
+    const std::vector<Input>& inputs() const { return inputs_; }
 
     std::string html() const {
         std::ostringstream html;
@@ -41,26 +80,18 @@ public:
         html << "<head>\n";
         html << "  <meta charset=\"UTF-8\" />\n";
         html << "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n";
-        html << "  <title>" << title_ << "</title>\n";
+        html << "  <title>" << escapeHtml(title_) << "</title>\n";
         html << "  <link rel=\"stylesheet\" href=\"styles.css\" />\n";
         html << "</head>\n";
         html << "<body>\n";
         html << "  <main class=\"app\">\n";
         html << "    <section class=\"panel\">\n";
-        html << "      <h1>" << title_ << "</h1>\n";
+        html << "      <h1>" << escapeHtml(title_) << "</h1>\n";
 
         if (!windows_.empty()) {
             html << "      <div class=\"window\">\n";
             for (const auto& window : windows_) {
-                html << "        <h2>" << window << "</h2>\n";
-            }
-            html << "      </div>\n";
-        }
-
-        if (!buttons_.empty()) {
-            html << "      <div class=\"toolbar\">\n";
-            for (const auto& button : buttons_) {
-                html << "        <button class=\"action\">" << button << "</button>\n";
+                html << "        <h2>" << escapeHtml(window) << "</h2>\n";
             }
             html << "      </div>\n";
         }
@@ -68,7 +99,29 @@ public:
         if (!labels_.empty()) {
             html << "      <div id=\"output\" class=\"output\">\n";
             for (const auto& label : labels_) {
-                html << "        <p>" << label << "</p>\n";
+                html << "        <p>" << escapeHtml(label) << "</p>\n";
+            }
+            html << "      </div>\n";
+        }
+
+        if (!inputs_.empty()) {
+            html << "      <div class=\"fields\">\n";
+            for (const auto& input : inputs_) {
+                html << "        <label for=\"" << escapeHtml(input.id) << "\">"
+                     << escapeHtml(input.id) << "</label>\n";
+                html << "        <input id=\"" << escapeHtml(input.id) << "\" name=\""
+                     << escapeHtml(input.id) << "\" placeholder=\"" << escapeHtml(input.placeholder)
+                     << "\" autocomplete=\"off\" />\n";
+            }
+            html << "      </div>\n";
+        }
+
+        if (!buttons_.empty()) {
+            html << "      <div class=\"toolbar\">\n";
+            for (std::size_t i = 0; i < buttons_.size(); ++i) {
+                html << "        <button type=\"button\" class=\"action\" data-action=\""
+                     << escapeHtml(buttons_[i].action) << "\" data-index=\"" << i << "\">"
+                     << escapeHtml(buttons_[i].label) << "</button>\n";
             }
             html << "      </div>\n";
         }
@@ -111,12 +164,15 @@ public:
         css << "  box-shadow: 0 14px 40px rgba(0,0,0,0.35);\n";
         css << "}\n\n";
         css << "h1 { margin-top: 0; font-size: 2rem; }\n";
-        css << ".window, .output {\n";
+        css << ".window, .output, .fields {\n";
         css << "  background: var(--card);\n";
         css << "  border-radius: 12px;\n";
         css << "  padding: 18px;\n";
         css << "  margin-top: 16px;\n";
         css << "}\n\n";
+        css << ".fields { display: grid; gap: 12px; }\n";
+        css << "label { display: block; margin-bottom: 4px; color: var(--muted); }\n";
+        css << "input { width: 100%; padding: 10px 12px; border: 1px solid rgba(148, 163, 184, 0.4); border-radius: 10px; background: rgba(15, 23, 42, 0.8); color: var(--text); }\n";
         css << ".toolbar {\n";
         css << "  display: flex;\n";
         css << "  gap: 12px;\n";
@@ -141,13 +197,14 @@ public:
     std::string js() const {
         std::ostringstream js;
         js << "document.addEventListener('DOMContentLoaded', () => {\n";
-        js << "  const buttons = document.querySelectorAll('.action');\n";
         js << "  const output = document.getElementById('output');\n";
-        js << "  buttons.forEach((button) => {\n";
+        js << "  document.querySelectorAll('.action').forEach((button) => {\n";
         js << "    button.addEventListener('click', () => {\n";
+        js << "      const fields = [...document.querySelectorAll('input')];\n";
+        js << "      const values = fields.map((field) => `${field.name}: ${field.value}`).join(' | ');\n";
+        js << "      const action = button.dataset.action || `clicked: ${button.textContent.trim()}`;\n";
         js << "      if (output) {\n";
-        js << "        const content = button.textContent.trim();\n";
-        js << "        output.innerHTML = '<p>Button clicked: ' + content + '</p>';\n";
+        js << "        output.textContent = values ? `${action} — ${values}` : action;\n";
         js << "      }\n";
         js << "    });\n";
         js << "  });\n";
@@ -179,8 +236,9 @@ public:
 private:
     std::string title_;
     std::vector<std::string> windows_;
-    std::vector<std::string> buttons_;
+    std::vector<Button> buttons_;
     std::vector<std::string> labels_;
+    std::vector<Input> inputs_;
 };
 
-}  // namespace cpp2web
+} // namespace cpp2web
