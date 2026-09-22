@@ -4,17 +4,20 @@ set -Eeuo pipefail
 REPO="haidamanama-sketch/cpp-to-web-converter"
 REF="${CPP2WEB_REF:-main}"
 PREFIX="${CPP2WEB_PREFIX:-$HOME/.local}"
+CA_BUNDLE="${CPP2WEB_CA_BUNDLE:-}"
 
 usage() {
     cat <<EOF
-Usage: install.sh [--prefix DIR] [--ref REF]
+Usage: install.sh [--prefix DIR] [--ref REF] [--ca-bundle FILE]
 
 Installs cpp2web_app into PREFIX/bin.
 Defaults:
   PREFIX=$HOME/.local
   REF=$REF
 
-Environment variables CPP2WEB_PREFIX and CPP2WEB_REF can also be used.
+Environment variables CPP2WEB_PREFIX, CPP2WEB_REF, and CPP2WEB_CA_BUNDLE
+can also be used. CPP2WEB_CA_BUNDLE is useful behind an HTTPS-inspecting
+corporate proxy; it must point to the proxy's trusted PEM root certificate.
 EOF
 }
 
@@ -28,6 +31,11 @@ while [[ $# -gt 0 ]]; do
         --ref)
             [[ $# -ge 2 ]] || { echo "Missing value for --ref" >&2; exit 2; }
             REF="$2"
+            shift 2
+            ;;
+        --ca-bundle)
+            [[ $# -ge 2 ]] || { echo "Missing value for --ca-bundle" >&2; exit 2; }
+            CA_BUNDLE="$2"
             shift 2
             ;;
         --help|-h)
@@ -49,10 +57,55 @@ for command in tar cmake; do
     fi
 done
 
+# Do not disable TLS verification. A missing CA store is a local prerequisite
+# problem, and --insecure would make the installer vulnerable to MITM attacks.
+if [[ -n "$CA_BUNDLE" && ! -f "$CA_BUNDLE" ]]; then
+    echo "Error: CA bundle '$CA_BUNDLE' does not exist." >&2
+    exit 1
+fi
+
+curl_args=(--fail --silent --show-error --location --retry 3 --connect-timeout 15 --proto '=https' --tlsv1.2)
+if [[ -n "$CA_BUNDLE" ]]; then
+    curl_args+=(--cacert "$CA_BUNDLE")
+fi
+
 if command -v curl >/dev/null 2>&1; then
-    fetch() { curl --fail --silent --show-error --location "$1" --output "$2"; }
+    fetch() {
+        local url="$1" output="$2" status
+        if curl "${curl_args[@]}" "$url" --output "$output"; then
+            return 0
+        else
+            status=$?
+        fi
+        if [[ "$status" -eq 60 ]]; then
+            cat >&2 <<'EOF'
+
+TLS certificate verification failed (curl error 60).
+This installer intentionally never bypasses certificate verification.
+
+On Ubuntu/Debian, repair the system CA store and retry:
+  sudo apt update
+  sudo apt install --reinstall ca-certificates
+  sudo update-ca-certificates
+
+If you are behind an HTTPS-inspecting corporate proxy, obtain its PEM root
+certificate from your administrator and retry with:
+  ./install.sh --ca-bundle /path/to/corporate-root-ca.pem
+
+Also check that your system clock is correct. Do not use curl -k/--insecure.
+EOF
+        fi
+        return "$status"
+    }
 elif command -v wget >/dev/null 2>&1; then
-    fetch() { wget --quiet --output-document="$2" "$1"; }
+    fetch() {
+        local url="$1" output="$2"
+        if [[ -n "$CA_BUNDLE" ]]; then
+            wget --https-only --ca-certificate="$CA_BUNDLE" --tries=3 --timeout=15 --output-document="$output" "$url"
+        else
+            wget --https-only --tries=3 --timeout=15 --output-document="$output" "$url"
+        fi
+    }
 else
     echo "Error: curl or wget is required." >&2
     exit 1
@@ -92,7 +145,7 @@ if [[ ":$PATH:" != *":$PREFIX/bin:"* ]]; then
     echo "Add it to your current shell with:"
     echo "  export PATH=\"$PREFIX/bin:\$PATH\""
     echo
-    echo "Then open a new shell or run the export command above."
+echo "Then open a new shell or run the export command above."
 fi
 
 echo
