@@ -1,0 +1,2 @@
+# Force GitHub linguist to treat the entire repository as C++
+* linguist-language=C++
